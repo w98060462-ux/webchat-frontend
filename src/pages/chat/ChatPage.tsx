@@ -7,7 +7,7 @@ import type { Message, Conversation } from '../../types'
 import { generateId, getApiError } from '../../utils'
 import MessageBubble from '../../components/chat/MessageBubble'
 import { getPrivateKey } from '../../crypto/keyStore'
-import { getPublicKey } from '../../crypto/publicKeyCache'
+import { getPublicKey, refreshPublicKey } from '../../crypto/publicKeyCache'
 import { encryptMessage, encryptWithGroupKey } from '../../crypto/e2e'
 import { getGroupKey } from '../../crypto/groupKeyCache'
 
@@ -211,6 +211,7 @@ export default function ChatPage() {
   }
 
   function buildConversation(msg: Message): Conversation {
+    const isMine = msg.fromUsername === user.username
     return {
       id: convId!,
       type: convType,
@@ -220,6 +221,8 @@ export default function ChatPage() {
       groupId: convType === 'group' ? (groupIdFromConvId() ?? storeConv?.groupId) : undefined,
       lastMessage: msg.contentType === 'text' ? msg.content : `[${msg.contentType}]`,
       lastMessageTime: msg.timestamp,
+      lastMessageStatus: isMine ? msg.status : 'received',
+      lastMessageMine: isMine,
       unreadCount: 0,
       updatedAt: Date.now(),
     }
@@ -232,14 +235,26 @@ export default function ChatPage() {
   ): Promise<{ encrypted: string; blocked: boolean }> {
     if (type === 'private') {
       const myPrivKey = await getPrivateKey(user.username)
-      const theirPubKey = await getPublicKey(targetUsername)
+      let theirPubKey = await getPublicKey(targetUsername)
       if (!myPrivKey || !theirPubKey) {
         setNoKeyWarning('对方尚未设置加密，暂时无法发送消息，请稍后重试')
         return { encrypted: content, blocked: true }
       }
       setNoKeyWarning(null)
-      const encrypted = await encryptMessage(myPrivKey, theirPubKey, content)
-      return { encrypted, blocked: false }
+      try {
+        const encrypted = await encryptMessage(myPrivKey, theirPubKey, content)
+        return { encrypted, blocked: false }
+      } catch {
+        // 加密失败，可能是缓存了旧公钥，强制重拉后重试一次
+        theirPubKey = await refreshPublicKey(targetUsername)
+        if (!theirPubKey) return { encrypted: content, blocked: true }
+        try {
+          const encrypted = await encryptMessage(myPrivKey, theirPubKey, content)
+          return { encrypted, blocked: false }
+        } catch {
+          return { encrypted: content, blocked: true }
+        }
+      }
     }
     const groupId = groupIdFromConvId()
     if (groupId === null) return { encrypted: content, blocked: true }
@@ -331,13 +346,62 @@ export default function ChatPage() {
     if (!convId) return
     if (convType !== 'private') return
 
-    const MAX = 1024 * 1024 * 1024  // 1GB（流式写盘，内存不再是瓶颈）
+    const MAX = 1024 * 1024 * 1024  // 1GB
+    const IMAGE_INLINE_MAX = 5 * 1024 * 1024  // 5MB 以内的图片走内联发送
+
     if (file.size === 0) {
       alert('不支持发送空文件')
       return
     }
     if (file.size > MAX) {
       alert('文件大小不能超过 1GB')
+      return
+    }
+
+    // 图片 ≤ 5MB：转 base64 加密后走 CHAT 消息，接收方直接显示，无需点"接受"
+    if (file.type.startsWith('image/') && file.size <= IMAGE_INLINE_MAX) {
+      const myPrivKey = await getPrivateKey(user.username)
+      const theirPubKey = await getPublicKey(convTarget)
+      if (!myPrivKey || !theirPubKey) {
+        setNoKeyWarning('对方尚未设置加密，暂时无法发送图片，请稍后重试')
+        return
+      }
+      setNoKeyWarning(null)
+
+      const arrayBuffer = await file.arrayBuffer()
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+      const dataUrl = `data:${file.type};base64,${base64}`
+      const encrypted = await encryptMessage(myPrivKey, theirPubKey, dataUrl)
+
+      const msgId = generateId()
+      const msg: Message = {
+        id: msgId,
+        conversationId: convId,
+        conversationType: 'private',
+        fromUsername: user.username,
+        fromNickname: user.nickname,
+        fromAvatar: user.avatar,
+        toUsername: convTarget,
+        contentType: 'image',
+        content: dataUrl,
+        filename: file.name,
+        fileSize: file.size,
+        status: 'sending',
+        timestamp: Date.now(),
+        createdAt: Date.now(),
+      }
+      addMessage(msg)
+      upsertConversation(buildConversation(msg))
+      const sent = sendWsMessage({
+        type: 'CHAT',
+        messageId: msgId,
+        toUsername: convTarget,
+        contentType: 'image',
+        content: encrypted,
+        filename: file.name,
+        fileSize: file.size,
+      })
+      if (!sent) updateMessageStatus(msgId, convId, 'failed')
       return
     }
 

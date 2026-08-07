@@ -3,12 +3,12 @@ import { useEffect, useState } from 'react'
 import { useAuthStore } from '../../store/authStore'
 import { useChatStore } from '../../store/chatStore'
 import { useWebSocket } from '../../hooks/useWebSocket'
-import { ensureKeyPair } from '../../crypto/keyStore'
+import { initSession } from '../../crypto/keyStore'
 
 export default function MainLayout() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
-  const { disconnect } = useWebSocket()
+  const { connect, disconnect } = useWebSocket()
 
   const { loadConversations } = useChatStore()
   const totalUnread = useChatStore(s =>
@@ -24,10 +24,11 @@ export default function MainLayout() {
       return
     }
     setKeyState('pending')
-    ensureKeyPair(user.username)
+    initSession(user.username)
       .then(() => {
         setKeyState('ready')
         loadConversations()
+        connect()
         // 密钥就绪后请求通知权限（在用户操作上下文中，避免冷启动被浏览器拦截）
         if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
           Notification.requestPermission()
@@ -85,8 +86,8 @@ export default function MainLayout() {
             className="btn-primary"
             onClick={() => {
               setKeyState('pending')
-              ensureKeyPair(user.username)
-                .then(() => { setKeyState('ready'); loadConversations() })
+              initSession(user.username)
+                .then(() => { setKeyState('ready'); loadConversations(); connect() })
                 .catch(() => setKeyState('failed'))
             }}
           >

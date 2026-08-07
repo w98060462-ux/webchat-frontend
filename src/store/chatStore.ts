@@ -51,11 +51,19 @@ export const useChatStore = create<ChatState>((set) => ({
   updateMessageStatus: (msgId, convId, status) => {
     set((state) => {
       const msgs = state.messages[convId] ?? []
+      const updatedMsgs = msgs.map((m) => (m.id === msgId ? { ...m, status } : m))
+      // 如果是最后一条消息，同步更新会话的状态
+      const convs = state.conversations.map(c => {
+        if (c.id !== convId) return c
+        const lastMsg = updatedMsgs[updatedMsgs.length - 1]
+        if (lastMsg?.id === msgId) {
+          return { ...c, lastMessageStatus: status as Conversation['lastMessageStatus'] }
+        }
+        return c
+      })
       return {
-        messages: {
-          ...state.messages,
-          [convId]: msgs.map((m) => (m.id === msgId ? { ...m, status } : m)),
-        },
+        messages: { ...state.messages, [convId]: updatedMsgs },
+        conversations: convs,
       }
     })
     db.updateMessageStatus(msgId, status)
@@ -112,6 +120,8 @@ export const useChatStore = create<ChatState>((set) => ({
           groupId: conv.groupId ?? old.groupId,
           lastMessage: conv.lastMessage ?? old.lastMessage,
           lastMessageTime: conv.lastMessageTime ?? old.lastMessageTime,
+          lastMessageStatus: conv.lastMessageStatus ?? old.lastMessageStatus,
+          lastMessageMine: conv.lastMessageMine ?? old.lastMessageMine,
         }
         next[idx] = merged
       } else {

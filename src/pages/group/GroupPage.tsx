@@ -225,14 +225,23 @@ export default function GroupPage() {
       {confirmLeave && (
         <div className="modal-overlay" onClick={() => { setConfirmLeave(null); setLeaveError('') }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>退出群组</h3>
+            {confirmLeave.owner.username === user.username
+              ? <h3>解散群组</h3>
+              : <h3>退出群组</h3>
+            }
             <p style={{ fontSize: 14, color: 'var(--text-sub)', marginBottom: 12 }}>
-              确定退出「{confirmLeave.name}」？退出后该群的所有聊天记录将从本设备清除。
+              {confirmLeave.owner.username === user.username
+                ? `你是群主，退出将解散「${confirmLeave.name}」，所有成员将被移出且无法恢复。`
+                : `确定退出「${confirmLeave.name}」？退出后该群的所有聊天记录将从本设备清除。`
+              }
             </p>
             {leaveError && <div className="form-error">{leaveError}</div>}
             <div className="modal-actions">
               <button className="btn-danger" onClick={() => leaveGroup(confirmLeave)} disabled={leaving}>
-                {leaving ? '退出中...' : '确定退出'}
+                {leaving
+                  ? (confirmLeave.owner.username === user.username ? '解散中...' : '退出中...')
+                  : (confirmLeave.owner.username === user.username ? '确定解散' : '确定退出')
+                }
               </button>
               <button onClick={() => { setConfirmLeave(null); setLeaveError('') }}>取消</button>
             </div>

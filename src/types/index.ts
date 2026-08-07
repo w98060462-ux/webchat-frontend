@@ -79,6 +79,8 @@ export interface Conversation {
   groupId?: number         // 群聊时的数字 ID，用于加密
   lastMessage: string | null
   lastMessageTime: number | null
+  lastMessageStatus?: 'sending' | 'sent' | 'delivered' | 'failed' | 'received'  // received = 对方发来的
+  lastMessageMine?: boolean  // 最后一条是否是自己发的
   unreadCount: number
   updatedAt: number
 }

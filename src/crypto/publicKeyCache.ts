@@ -1,22 +1,29 @@
 import { userApi } from '../api'
 import type { User } from '../types'
 
-// 内存公钥缓存：username → JWK（null 表示已查询但对方无公钥）
-const cache = new Map<string, JsonWebKey | null>()
+const TTL_MS = 10 * 60 * 1000 // 公钥缓存 10 分钟，过期强制重拉
+
+interface CacheEntry {
+  jwk: JsonWebKey | null
+  expiresAt: number
+}
+
+const cache = new Map<string, CacheEntry>()
 // in-flight 去重：同一 username 并发请求只发一次 HTTP
 const inflight = new Map<string, Promise<JsonWebKey | null>>()
 
-export async function getPublicKey(username: string): Promise<JsonWebKey | null> {
-  if (cache.has(username)) return cache.get(username)!
+function fetchAndCache(username: string): Promise<JsonWebKey | null> {
   if (inflight.has(username)) return inflight.get(username)!
   const req = (async () => {
     try {
       const res = await userApi.getUserByUsername(username)
       if (res.success && res.data.publicKey) {
         const jwk = JSON.parse(res.data.publicKey) as JsonWebKey
-        cache.set(username, jwk)
+        cache.set(username, { jwk, expiresAt: Date.now() + TTL_MS })
         return jwk
       }
+      // 对方暂无公钥，短暂缓存 null 避免频繁重试（30 秒后可重试）
+      cache.set(username, { jwk: null, expiresAt: Date.now() + 30_000 })
       return null
     } catch {
       return null
@@ -28,15 +35,46 @@ export async function getPublicKey(username: string): Promise<JsonWebKey | null>
   return req
 }
 
-// 批量写入（在线用户列表加载后调用）
+export async function getPublicKey(username: string): Promise<JsonWebKey | null> {
+  const entry = cache.get(username)
+  if (entry && Date.now() < entry.expiresAt) return entry.jwk
+  return fetchAndCache(username)
+}
+
+// 强制清除缓存后重拉（解密失败/加密失败时调用）
+export async function refreshPublicKey(username: string): Promise<JsonWebKey | null> {
+  cache.delete(username)
+  inflight.delete(username)
+  return fetchAndCache(username)
+}
+
+// 批量预热：传入用户列表，一次性把公钥全部拉进缓存
+export async function warmUpPublicKeys(users: User[]): Promise<void> {
+  const toFetch = users.filter(u => {
+    if (!u.username) return false
+    // 已有公钥字段直接写入缓存，不发 HTTP
+    if (u.publicKey) {
+      try {
+        const jwk = JSON.parse(u.publicKey) as JsonWebKey
+        cache.set(u.username, { jwk, expiresAt: Date.now() + TTL_MS })
+      } catch { }
+      return false
+    }
+    // 缓存未过期则跳过
+    const entry = cache.get(u.username)
+    return !(entry && Date.now() < entry.expiresAt)
+  })
+  await Promise.allSettled(toFetch.map(u => fetchAndCache(u.username)))
+}
+
+// 批量写入（兼容旧调用）
 export function setPublicKeys(users: User[]): void {
   for (const u of users) {
     if (u.publicKey) {
       try {
-        cache.set(u.username, JSON.parse(u.publicKey) as JsonWebKey)
+        cache.set(u.username, { jwk: JSON.parse(u.publicKey) as JsonWebKey, expiresAt: Date.now() + TTL_MS })
       } catch { }
     }
-    // 无公钥时不写 null，保留下次重试的机会
   }
 }
 

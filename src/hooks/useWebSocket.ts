@@ -6,7 +6,7 @@ import { reLoginWithCredentials } from '../api/http'
 import { getPrivateConvId, getGroupConvId } from '../utils'
 import type { WsMessage, Message } from '../types'
 import { getPrivateKey } from '../crypto/keyStore'
-import { getPublicKey } from '../crypto/publicKeyCache'
+import { getPublicKey, invalidatePublicKey } from '../crypto/publicKeyCache'
 import { decryptMessage, decryptWithGroupKey, generateGroupKey, wrapGroupKey } from '../crypto/e2e'
 import { getGroupKey, setGroupKey, invalidateGroupKey } from '../crypto/groupKeyCache'
 
@@ -45,7 +45,7 @@ type PendingTransferMeta = Omit<TransferState, 'writable'>
 const pendingTransfers = new Map<string, PendingTransferMeta>()
 
 export function useWebSocket() {
-  const { accessToken, user } = useAuthStore()
+  const { accessToken } = useAuthStore()
   const { addMessage, updateMessageStatus, upsertConversation } = useChatStore()
   const connectedRef = useRef(false)
 
@@ -153,11 +153,11 @@ export function useWebSocket() {
           const myPrivKey = await getPrivateKey(currentUser.username)
           const theirPubKey = await getPublicKey(msg.fromUsername!)
           if (myPrivKey && theirPubKey) {
-            // 尝试解密，成功则用解密结果；失败说明是明文（无密钥用户发的），保留原文
             try {
               content = await decryptMessage(myPrivKey, theirPubKey, content)
             } catch {
-              // 解密失败 = 消息是明文，直接用原文
+              // 解密失败：可能是发送方换了密钥对，清除缓存，下次收到新消息时重拉
+              invalidatePublicKey(msg.fromUsername!)
             }
           }
         } catch { }
@@ -168,7 +168,8 @@ export function useWebSocket() {
             try {
               content = await decryptWithGroupKey(groupKey, content)
             } catch {
-              // 解密失败 = 消息是明文或密钥不匹配，保留原文
+              // 群密钥不匹配，清除缓存，下次收消息时重新从服务器拉取
+              invalidateGroupKey(msg.groupId)
             }
           }
         } catch { }
@@ -200,10 +201,11 @@ export function useWebSocket() {
         targetUsername: isGroup ? msg.toGroupName! : msg.fromUsername!,
         targetNickname: isGroup ? null : (msg.fromNickname ?? null),
         targetAvatar: isGroup ? (existingConv?.targetAvatar ?? null) : (msg.fromAvatar ?? null),
-        // 群会话必须保留 groupId（来自服务端字段或已有 conv），否则刷新后无法加密发消息
         groupId: isGroup ? (msg.groupId ?? existingConv?.groupId) : undefined,
         lastMessage: msg.contentType === 'text' ? content : `[${msg.contentType}]`,
         lastMessageTime: msg.timestamp ?? Date.now(),
+        lastMessageStatus: 'received',
+        lastMessageMine: false,
         unreadCount: (existingConv?.unreadCount ?? 0) + 1,
         updatedAt: Date.now(),
       })
@@ -444,7 +446,7 @@ export function useWebSocket() {
   }, [])
 
   useEffect(() => {
-    if (accessToken && user) connect()
+    // 不再自动 connect，由 MainLayout 在 initSession 完成后显式调用
     return () => { }
   }, [accessToken])
 

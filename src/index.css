@@ -45,7 +45,10 @@ input:focus, textarea:focus { border-color: var(--primary); }
 /* ===== Layout ===== */
 .app-layout { display: flex; flex-direction: column; height: 100%; height: 100dvh; width: 100%; max-width: 600px; margin: 0 auto; position: relative; background: var(--bg); overflow: hidden; }
 .main-content { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; }
-.page { display: flex; flex-direction: column; height: 100%; }
+/* 普通列表页：min-height 让内容少时撑满，内容多时超出由 .main-content 滚动 */
+.page { display: flex; flex-direction: column; min-height: 100%; }
+/* 聊天页：独占全屏，自己管理内部滚动，不走 .main-content 滚动 */
+.page-full { display: flex; flex-direction: column; height: 100%; height: 100dvh; overflow: hidden; }
 
 /* ===== Bottom Nav ===== */
 .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 600px; height: calc(var(--nav-h) + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); display: flex; z-index: 100; padding-bottom: env(safe-area-inset-bottom); }
@@ -72,6 +75,9 @@ input:focus, textarea:focus { border-color: var(--primary); }
 .list-item-name { font-weight: 500; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list-item-sub { font-size: 13px; color: var(--text-sub); }
 .list-item-preview { font-size: 13px; color: var(--text-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.conv-status { font-size: 12px; color: var(--text-sub); flex-shrink: 0; }
+.conv-status-delivered { color: var(--primary); }
+.conv-status-failed { color: var(--danger); }
 .list-item-time { font-size: 12px; color: var(--text-sub); white-space: nowrap; margin-left: 8px; }
 
 /* ===== Avatar ===== */
@@ -120,7 +126,7 @@ input:focus, textarea:focus { border-color: var(--primary); }
 .auth-switch { text-align: center; margin-top: 20px; font-size: 14px; color: var(--text-sub); }
 
 /* ===== Chat Page ===== */
-.chat-page { display: flex; flex-direction: column; height: 100%; height: 100dvh; width: 100%; max-width: 600px; margin: 0 auto; overflow: hidden; position: relative; padding-bottom: var(--keyboard-h, 0px); box-sizing: border-box; }
+.chat-page { display: flex; flex-direction: column; height: 100%; width: 100%; max-width: 600px; margin: 0 auto; overflow: hidden; position: relative; box-sizing: border-box; }
 .chat-header { height: var(--header-h); display: flex; align-items: center; gap: 10px; padding: 0 12px; padding-top: env(safe-area-inset-top); background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .chat-header-info { flex: 1; min-width: 0; }
 .chat-header-name { font-weight: 600; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
@@ -156,7 +162,7 @@ input:focus, textarea:focus { border-color: var(--primary); }
 @keyframes fadeOut { 0%,70% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-color-scheme: dark) { .file-saved-toast { background: #14532d; color: #bbf7d0; border-bottom-color: #166534; } }
 .chat-messages { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px 12px 8px; display: flex; flex-direction: column; gap: 8px; -webkit-overflow-scrolling: touch; }
-.chat-input-area { display: flex; align-items: flex-end; gap: 6px; padding: 8px; padding-bottom: max(8px, env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); flex-shrink: 0; }
+.chat-input-area { display: flex; align-items: flex-end; gap: 6px; padding: 8px; padding-bottom: calc(max(8px, env(safe-area-inset-bottom)) + var(--keyboard-h, 0px)); background: var(--surface); border-top: 1px solid var(--border); flex-shrink: 0; }
 .chat-input { flex: 1; min-height: 38px; max-height: 100px; resize: none; border-radius: 20px; padding: 8px 12px; font-size: 16px; line-height: 1.4; overflow-y: auto; min-width: 0; }
 .btn-send { background: var(--primary); color: #fff; border-radius: 20px; padding: 8px 14px; font-weight: 500; white-space: nowrap; flex-shrink: 0; font-size: 14px; }
 .btn-send:disabled { opacity: .5; }
@@ -313,7 +319,7 @@ input:focus, textarea:focus { border-color: var(--primary); }
 .settings-arrow { color: var(--text-sub); font-size: 18px; font-weight: 300; }
 
 /* ===== 关于页面 ===== */
-.about-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px); }
+.about-body { padding-bottom: 16px; }
 
 .about-hero { text-align: center; padding: 32px 24px 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
 .about-hero-icon { font-size: 52px; line-height: 1; margin-bottom: 8px; }

@@ -18,6 +18,10 @@ export default function RegisterPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    if (!/^[a-zA-Z0-9_]{3,50}$/.test(username)) {
+      setError('用户名只能包含字母、数字和下划线，长度 3-50 位')
+      return
+    }
     if (password !== confirmPassword) { setError('两次密码不一致'); return }
     setLoading(true)
     startWaiting()
