@@ -18,13 +18,16 @@ export default function GroupPage() {
   const [groups, setGroups] = useState<Group[]>([])
   const [showCreate, setShowCreate] = useState(false)
   const [showInvite, setShowInvite] = useState<Group | null>(null)
+  const [confirmLeave, setConfirmLeave] = useState<Group | null>(null)
   const [newGroupName, setNewGroupName] = useState('')
   const [onlineUsers, setOnlineUsers] = useState<User[]>([])
   const [error, setError] = useState('')
+  const [leaveError, setLeaveError] = useState('')
   const [inviteMsg, setInviteMsg] = useState('')
   const [inviteMsgType, setInviteMsgType] = useState<'success' | 'warn' | 'error'>('success')
   const [creating, setCreating] = useState(false)
-  const [inviting, setInviting] = useState<number | null>(null)  // 正在邀请的 userId
+  const [leaving, setLeaving] = useState(false)
+  const [inviting, setInviting] = useState<number | null>(null)
 
   useEffect(() => { loadGroups() }, [])
   useEffect(() => {
@@ -144,15 +147,20 @@ export default function GroupPage() {
     }
   }
 
-  async function leaveGroup(groupId: number, groupName: string) {
-    if (!confirm('确定退出群组？退出后该群的所有聊天记录将从本设备清除。')) return
+  async function leaveGroup(group: Group) {
+    if (leaving) return
+    setLeaveError('')
+    setLeaving(true)
     try {
-      await groupApi.leave(groupId)
-      invalidateGroupKey(groupId)
-      clearConversation(getGroupConvId(groupName))
-      setGroups(g => g.filter(gr => gr.id !== groupId))
+      await groupApi.leave(group.id)
+      invalidateGroupKey(group.id)
+      clearConversation(getGroupConvId(group.name))
+      setGroups(g => g.filter(gr => gr.id !== group.id))
+      setConfirmLeave(null)
     } catch (err) {
-      alert(getApiError(err))
+      setLeaveError(getApiError(err))
+    } finally {
+      setLeaving(false)
     }
   }
 
@@ -209,6 +217,24 @@ export default function GroupPage() {
                 {creating ? '创建中...' : '创建'}
               </button>
               <button onClick={() => setShowCreate(false)}>取消</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmLeave && (
+        <div className="modal-overlay" onClick={() => { setConfirmLeave(null); setLeaveError('') }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>退出群组</h3>
+            <p style={{ fontSize: 14, color: 'var(--text-sub)', marginBottom: 12 }}>
+              确定退出「{confirmLeave.name}」？退出后该群的所有聊天记录将从本设备清除。
+            </p>
+            {leaveError && <div className="form-error">{leaveError}</div>}
+            <div className="modal-actions">
+              <button className="btn-danger" onClick={() => leaveGroup(confirmLeave)} disabled={leaving}>
+                {leaving ? '退出中...' : '确定退出'}
+              </button>
+              <button onClick={() => { setConfirmLeave(null); setLeaveError('') }}>取消</button>
             </div>
           </div>
         </div>
@@ -272,7 +298,7 @@ export default function GroupPage() {
             </div>
             <div className="btn-group" onClick={e => e.stopPropagation()}>
               <button className="btn-sm" onClick={() => setShowInvite(g)}>邀请</button>
-              <button className="btn-sm btn-danger" onClick={() => leaveGroup(g.id, g.name)}>退出</button>
+              <button className="btn-sm btn-danger" onClick={() => { setConfirmLeave(g); setLeaveError('') }}>退出</button>
             </div>
           </div>
         ))}

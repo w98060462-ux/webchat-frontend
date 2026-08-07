@@ -18,6 +18,7 @@ export default function ProfilePage() {
   const [nickname, setNickname] = useState(user?.nickname ?? '')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [confirmLogout, setConfirmLogout] = useState(false)
 
   async function saveProfile() {
     setSaving(true)
@@ -38,7 +39,6 @@ export default function ProfilePage() {
   }
 
   async function logout() {
-    if (!confirm('确定退出登录？')) return
     try {
       if (refreshToken) await authApi.logout(refreshToken)
     } catch { /* ignore */ }
@@ -111,7 +111,17 @@ export default function ProfilePage() {
       </div>
 
       <div className="profile-actions">
-        <button className="btn-danger btn-full" onClick={logout}>退出登录</button>
+        {confirmLogout ? (
+          <div className="logout-confirm">
+            <p>确定退出登录？</p>
+            <div className="btn-group">
+              <button className="btn-danger" onClick={logout}>确定退出</button>
+              <button onClick={() => setConfirmLogout(false)}>取消</button>
+            </div>
+          </div>
+        ) : (
+          <button className="btn-danger btn-full" onClick={() => setConfirmLogout(true)}>退出登录</button>
+        )}
       </div>
     </div>
   )

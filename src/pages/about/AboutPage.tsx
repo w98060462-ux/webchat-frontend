@@ -91,14 +91,14 @@ export default function AboutPage() {
               <span className="about-feature-icon">💬</span>
               <div>
                 <div className="about-feature-name">私聊</div>
-                <div className="about-feature-desc">点击「在线用户」里任意一人，发起一对一加密对话。支持文字、图片、任意格式文件。</div>
+                <div className="about-feature-desc">点击「在线」里任意一人，发起一对一加密对话。支持文字（最多 5000 字）、图片、任意格式文件。消息有四种状态：发送中(○)→已发送(✓)→对方已读(✓✓)→失败(✗)。</div>
               </div>
             </div>
             <div className="about-feature">
               <span className="about-feature-icon">👥</span>
               <div>
                 <div className="about-feature-name">群聊</div>
-                <div className="about-feature-desc">在「群组」页面创建群，把在线的人拉进来一起聊。群消息同样加密，服务器看不到内容。</div>
+                <div className="about-feature-desc">在「群组」页面创建群，群主邀请在线的人加入。群消息同样加密，服务器看不到内容。成员退出后群密钥自动轮换，退出成员无法读到新消息。</div>
               </div>
             </div>
             <div className="about-feature">
@@ -127,6 +127,43 @@ export default function AboutPage() {
               <div>
                 <div className="about-feature-name">安装到桌面</div>
                 <div className="about-feature-desc">可以像 App 一样安装到手机主屏幕，全屏运行，体验和原生 App 一样。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 消息状态 */}
+        <div className="about-section">
+          <h2 className="about-section-title">💬 消息状态说明</h2>
+          <div className="about-card">
+            <div className="about-status-list">
+              <div className="about-status-row">
+                <span className="about-status-icon">○</span>
+                <div>
+                  <div className="about-status-name">发送中</div>
+                  <div className="about-status-desc">消息正在发送，等待服务器确认</div>
+                </div>
+              </div>
+              <div className="about-status-row">
+                <span className="about-status-icon">✓</span>
+                <div>
+                  <div className="about-status-name">已发送</div>
+                  <div className="about-status-desc">服务器已转发给对方，对方设备尚未打开此对话</div>
+                </div>
+              </div>
+              <div className="about-status-row">
+                <span className="about-status-icon delivered">✓✓</span>
+                <div>
+                  <div className="about-status-name">对方已读</div>
+                  <div className="about-status-desc">对方打开了这个聊天窗口，消息已被看到</div>
+                </div>
+              </div>
+              <div className="about-status-row">
+                <span className="about-status-icon failed">✗</span>
+                <div>
+                  <div className="about-status-name">发送失败</div>
+                  <div className="about-status-desc">网络断开或对方不在线，重新进入聊天页面后可重发</div>
+                </div>
               </div>
             </div>
           </div>
@@ -190,6 +227,10 @@ export default function AboutPage() {
 
           <div className="about-faq-list">
             <div className="about-faq">
+              <div className="about-faq-q">打开页面后很久才能登录，显示"服务器正在唤醒"是什么意思？</div>
+              <div className="about-faq-a">服务器部署在会自动休眠的平台上，一段时间没人用后会进入睡眠。你是当天第一个访问的人，需要等服务器唤醒，通常 10～30 秒内完成，倒计时结束后自动重试，不需要手动刷新。</div>
+            </div>
+            <div className="about-faq">
               <div className="about-faq-q">消息发出去显示"发送失败"怎么办？</div>
               <div className="about-faq-a">通常是网络断开导致的。检查网络后重新进入聊天页面，再发一次即可。</div>
             </div>
@@ -245,11 +286,6 @@ export default function AboutPage() {
             一句话：服务器只知道你在用这个工具，不知道你用它聊了什么。
           </div>
         </div>
-
-        <div className="about-footer">
-          <p>WebChat 是开源项目，代码公开可查。</p>
-        </div>
-
       </div>
     </div>
   )
