@@ -135,17 +135,19 @@ export default function ChatPage() {
     }
   }, [convId])
 
-  // 进入聊天页时，对当前会话中未读的对方消息发送已读回执
+  // 进入聊天页时，对当前会话中对方的消息发送已读回执
   // 让发送方知道消息已被阅读（sent → delivered）
+  // 注意：接收方本地存的消息 status 是 'delivered'，不能用 status 做过滤条件
   useEffect(() => {
     if (!convId || !user) return
     const msgs = useChatStore.getState().messages[convId] ?? []
     for (const m of msgs) {
-      if (m.fromUsername !== user.username && m.status === 'sent') {
+      if (m.fromUsername !== user.username) {
         sendWsMessage({
           type: 'MESSAGE_READ',
           messageId: m.id,
-          toUsername: m.fromUsername,  // 消息原发送方
+          toUsername: m.fromUsername,
+          groupId: m.conversationType === 'group' ? (useChatStore.getState().conversations.find(c => c.id === convId)?.groupId) : undefined,
         })
       }
     }
@@ -175,11 +177,12 @@ export default function ChatPage() {
     if (!convId || !user) return
     const msgs = useChatStore.getState().messages[convId] ?? []
     const latest = msgs[msgs.length - 1]
-    if (latest && latest.fromUsername !== user.username && latest.status === 'sent') {
+    if (latest && latest.fromUsername !== user.username) {
       sendWsMessage({
         type: 'MESSAGE_READ',
         messageId: latest.id,
         toUsername: latest.fromUsername,
+        groupId: latest.conversationType === 'group' ? (useChatStore.getState().conversations.find(c => c.id === convId)?.groupId) : undefined,
       })
     }
   }, [convMessages.length])
