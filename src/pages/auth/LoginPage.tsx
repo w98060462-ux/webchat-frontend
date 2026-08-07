@@ -2,7 +2,8 @@ import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { authApi } from '../../api'
 import { useAuthStore } from '../../store/authStore'
-import { getApiError } from '../../utils'
+import { getApiError, saveCredentials } from '../../utils'
+import { useWakeHint } from '../../hooks/useWakeHint'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -11,29 +12,36 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const { wakeHint, startWaiting, stopWaiting } = useWakeHint()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     setLoading(true)
+    startWaiting()
     try {
       const res = await authApi.login({
         login,
         password,
         deviceName: navigator.userAgent.slice(0, 100),
       })
+      stopWaiting()
       if (res.success) {
+        saveCredentials(res.data.user.username, password)
         setAuth(res.data.accessToken, res.data.refreshToken, res.data.user)
         navigate('/chat')
       } else {
         setError(res.message ?? '登录失败')
       }
     } catch (err) {
+      stopWaiting()
       setError(getApiError(err))
     } finally {
       setLoading(false)
     }
   }
+
+  const buttonLabel = wakeHint ?? (loading ? '登录中...' : '登录')
 
   return (
     <div className="auth-container">
@@ -45,12 +53,12 @@ export default function LoginPage() {
         </div>
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
-            <label>用户名 / UID</label>
+            <label>用户名</label>
             <input
               type="text"
               value={login}
               onChange={e => setLogin(e.target.value)}
-              placeholder="输入用户名或 UID"
+              placeholder="输入用户名"
               required
               autoComplete="username"
             />
@@ -67,8 +75,11 @@ export default function LoginPage() {
             />
           </div>
           {error && <div className="form-error">{error}</div>}
+          {wakeHint && !error && (
+            <div className="wake-hint">{wakeHint}</div>
+          )}
           <button type="submit" className="btn-primary btn-full" disabled={loading}>
-            {loading ? '登录中...' : '登录'}
+            {buttonLabel}
           </button>
         </form>
         <p className="auth-switch">

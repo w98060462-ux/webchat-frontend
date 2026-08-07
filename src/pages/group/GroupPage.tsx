@@ -1,64 +1,155 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { groupApi, friendApi } from '../../api'
+import { groupApi, userApi } from '../../api'
+import { useAuthStore } from '../../store/authStore'
 import { useChatStore } from '../../store/chatStore'
-import type { Group, FriendItem } from '../../types'
-import { getApiError } from '../../utils'
+import type { Group, User } from '../../types'
+import { getGroupConvId, getApiError } from '../../utils'
+import { generateGroupKey, wrapGroupKey, unwrapGroupKey } from '../../crypto/e2e'
+import { getPrivateKey, getOwnPublicKeyJwk } from '../../crypto/keyStore'
+import { getPublicKey, setPublicKeys } from '../../crypto/publicKeyCache'
+import { setGroupKey, invalidateGroupKey } from '../../crypto/groupKeyCache'
 
 export default function GroupPage() {
-  const { upsertConversation } = useChatStore()
+  const user = useAuthStore(s => s.user)!
+  const { upsertConversation, clearConversation } = useChatStore()
   const navigate = useNavigate()
 
   const [groups, setGroups] = useState<Group[]>([])
   const [showCreate, setShowCreate] = useState(false)
   const [showInvite, setShowInvite] = useState<Group | null>(null)
   const [newGroupName, setNewGroupName] = useState('')
-  const [friends, setFriends] = useState<FriendItem[]>([])
+  const [onlineUsers, setOnlineUsers] = useState<User[]>([])
   const [error, setError] = useState('')
+  const [inviteMsg, setInviteMsg] = useState('')
+  const [inviteMsgType, setInviteMsgType] = useState<'success' | 'warn' | 'error'>('success')
+  const [creating, setCreating] = useState(false)
+  const [inviting, setInviting] = useState<number | null>(null)  // 正在邀请的 userId
 
   useEffect(() => { loadGroups() }, [])
   useEffect(() => {
-    if (showInvite) friendApi.list().then(r => { if (r.success) setFriends(r.data) })
+    if (showInvite) {
+      userApi.online().then(r => {
+        if (r.success) {
+          setOnlineUsers(r.data)
+          setPublicKeys(r.data) // 预热公钥缓存，邀请时直接用
+        }
+      })
+    }
   }, [showInvite])
+
+  // 实时监听上线/下线，更新邀请弹窗的在线列表
+  useEffect(() => {
+    function onOnline(e: Event) {
+      const { username } = (e as CustomEvent).detail
+      userApi.getUserByUsername(username).then(res => {
+        if (res.success) {
+          setOnlineUsers(prev => {
+            if (prev.some(u => u.username === username)) return prev
+            setPublicKeys([res.data])
+            return [...prev, res.data]
+          })
+        }
+      }).catch(() => {})
+    }
+    function onOffline(e: Event) {
+      const { username } = (e as CustomEvent).detail
+      setOnlineUsers(prev => prev.filter(u => u.username !== username))
+    }
+    window.addEventListener('user-online', onOnline)
+    window.addEventListener('user-offline', onOffline)
+    return () => {
+      window.removeEventListener('user-online', onOnline)
+      window.removeEventListener('user-offline', onOffline)
+    }
+  }, [])
 
   async function loadGroups() {
     try {
       const res = await groupApi.list()
       if (res.success) setGroups(res.data)
-    } catch { /* ignore */ }
+    } catch { }
   }
 
   async function createGroup() {
-    if (!newGroupName.trim()) return
+    if (!newGroupName.trim() || creating) return
     setError('')
+    setCreating(true)
     try {
       const res = await groupApi.create(newGroupName.trim())
-      if (res.success) {
-        setGroups(g => [res.data, ...g])
-        setShowCreate(false)
-        setNewGroupName('')
-      } else {
-        setError(res.message ?? '创建失败')
+      if (!res.success) { setError(res.message ?? '创建失败'); return }
+
+      const group = res.data
+      // 创建群后立即生成群密钥，并用自己的公钥包装后上传（自己作为第一个成员）
+      const myPrivKey = await getPrivateKey(user.username)
+      const myPubKey = await getOwnPublicKeyJwk(user.username)
+      if (myPrivKey && myPubKey) {
+        const groupKey = await generateGroupKey()
+        const wrapped = await wrapGroupKey(groupKey, myPubKey, myPrivKey)
+        await groupApi.uploadGroupKey(group.id, user.username, wrapped, user.username)
+        setGroupKey(group.id, groupKey)
       }
+
+      setGroups(g => [group, ...g])
+      setShowCreate(false)
+      setNewGroupName('')
     } catch (err) {
       setError(getApiError(err))
+    } finally {
+      setCreating(false)
     }
   }
 
-  async function inviteMember(groupId: number, userId: number) {
+  async function inviteMember(group: Group, targetUser: User) {
+    if (inviting !== null) return
+    setInviteMsg('')
+    setInviting(targetUser.id)
     try {
-      await groupApi.invite(groupId, userId)
-      alert('邀请成功')
-      await loadGroups()
+      await groupApi.invite(group.id, targetUser.id)
+      const myPrivKey = await getPrivateKey(user.username)
+      const memberPubKey = await getPublicKey(targetUser.username)
+      const myGroupKeyRes = await groupApi.getMyGroupKey(group.id)
+      if (myPrivKey && memberPubKey && myGroupKeyRes.success && myGroupKeyRes.data) {
+        const pipeIdx = myGroupKeyRes.data.lastIndexOf('|')
+        const encryptedKey = myGroupKeyRes.data.slice(0, pipeIdx)
+        const wrappedBy = myGroupKeyRes.data.slice(pipeIdx + 1)
+        const wrapperPubKey = await getPublicKey(wrappedBy)
+        if (wrapperPubKey) {
+          const groupKey = await unwrapGroupKey(encryptedKey, wrapperPubKey, myPrivKey)
+          const wrapped = await wrapGroupKey(groupKey, memberPubKey, myPrivKey)
+          await groupApi.uploadGroupKey(group.id, targetUser.username, wrapped, user.username)
+        } else {
+          setInviteMsgType('warn')
+          setInviteMsg(`已邀请 ${targetUser.nickname || targetUser.username}，但密钥分发失败，对方可能无法发送加密消息`)
+        }
+      } else if (!memberPubKey) {
+        setInviteMsgType('warn')
+        setInviteMsg(`已邀请 ${targetUser.nickname || targetUser.username}，但对方尚未设置加密，暂时无法发送群消息`)
+      } else {
+        setInviteMsgType('success')
+        setInviteMsg(`已成功邀请 ${targetUser.nickname || targetUser.username}`)
+      }
+      // 刷新群列表，同时更新 showInvite 为最新成员数据
+      const res = await groupApi.list()
+      if (res.success) {
+        setGroups(res.data)
+        const updated = res.data.find(g => g.id === group.id)
+        if (updated) setShowInvite(updated)
+      }
     } catch (err) {
-      alert(getApiError(err))
+      setInviteMsgType('error')
+      setInviteMsg(getApiError(err))
+    } finally {
+      setInviting(null)
     }
   }
 
-  async function leaveGroup(groupId: number) {
-    if (!confirm('确定退出群组？')) return
+  async function leaveGroup(groupId: number, groupName: string) {
+    if (!confirm('确定退出群组？退出后该群的所有聊天记录将从本设备清除。')) return
     try {
       await groupApi.leave(groupId)
+      invalidateGroupKey(groupId)
+      clearConversation(getGroupConvId(groupName))
       setGroups(g => g.filter(gr => gr.id !== groupId))
     } catch (err) {
       alert(getApiError(err))
@@ -66,20 +157,31 @@ export default function GroupPage() {
   }
 
   function openGroupChat(group: Group) {
-    const convId = `group_${group.id}`
+    const convId = getGroupConvId(group.name)
     upsertConversation({
       id: convId,
       type: 'group',
-      targetId: group.id,
-      targetName: group.name,
+      targetUsername: group.name,
+      targetNickname: null,
       targetAvatar: group.avatar,
+      groupId: group.id,
       lastMessage: null,
       lastMessageTime: null,
       unreadCount: 0,
       updatedAt: Date.now(),
     })
     navigate(`/chat/${convId}`, {
-      state: { conv: { id: convId, type: 'group', targetId: group.id, targetName: group.name, targetAvatar: group.avatar } },
+      state: {
+        groupId: group.id,
+        conv: {
+          id: convId,
+          type: 'group',
+          targetUsername: group.name,
+          targetNickname: null,
+          targetAvatar: group.avatar,
+          groupId: group.id,
+        },
+      },
     })
   }
 
@@ -103,7 +205,9 @@ export default function GroupPage() {
             />
             {error && <div className="form-error">{error}</div>}
             <div className="modal-actions">
-              <button className="btn-primary" onClick={createGroup}>创建</button>
+              <button className="btn-primary" onClick={createGroup} disabled={creating}>
+                {creating ? '创建中...' : '创建'}
+              </button>
               <button onClick={() => setShowCreate(false)}>取消</button>
             </div>
           </div>
@@ -111,32 +215,51 @@ export default function GroupPage() {
       )}
 
       {showInvite && (
-        <div className="modal-overlay" onClick={() => setShowInvite(null)}>
+        <div className="modal-overlay" onClick={() => { setShowInvite(null); setInviteMsg(''); setInviteMsgType('success') }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>邀请好友加入「{showInvite.name}」</h3>
+            <h3>邀请在线用户加入「{showInvite.name}」</h3>
+            {inviteMsg && (
+              <div className={`invite-msg invite-msg-${inviteMsgType}`} style={{ marginBottom: 8 }}>
+                {inviteMsg}
+              </div>
+            )}
             <div className="list">
-              {friends.filter(f => !showInvite.members.find(m => m.id === f.user.id)).map(f => (
-                <div key={f.user.id} className="list-item">
-                  <div className="avatar"><span>{(f.user.nickname || f.user.username)[0].toUpperCase()}</span></div>
-                  <div className="list-item-body">
-                    <span className="list-item-name">{f.user.nickname || f.user.username}</span>
+              {onlineUsers
+                .filter(u => u.id !== user.id && !showInvite.members.find(m => m.username === u.username))
+                .map(u => (
+                  <div key={u.id} className="list-item">
+                    <div className="avatar">
+                      {u.avatar
+                        ? <img src={u.avatar} alt="" />
+                        : <span>{(u.nickname || u.username)[0].toUpperCase()}</span>}
+                      <span className="online-dot" />
+                    </div>
+                    <div className="list-item-body">
+                      <span className="list-item-name">{u.nickname || u.username}</span>
+                    </div>
+                    <button className="btn-sm btn-primary" onClick={() => inviteMember(showInvite, u)} disabled={inviting !== null}>
+                      {inviting === u.id ? '邀请中...' : '邀请'}
+                    </button>
                   </div>
-                  <button className="btn-sm btn-primary" onClick={() => inviteMember(showInvite.id, f.user.id)}>邀请</button>
-                </div>
-              ))}
-              {friends.filter(f => !showInvite.members.find(m => m.id === f.user.id)).length === 0 && (
-                <p className="empty-state">所有好友都已在群组中</p>
+                ))}
+              {onlineUsers.filter(u => u.id !== user.id && !showInvite.members.find(m => m.username === u.username)).length === 0 && (
+                <div className="empty-state"><p>暂无可邀请的在线用户</p></div>
               )}
             </div>
             <div className="modal-actions">
-              <button onClick={() => setShowInvite(null)}>关闭</button>
+              <button onClick={() => { setShowInvite(null); setInviteMsg(''); setInviteMsgType('success') }}>关闭</button>
             </div>
           </div>
         </div>
       )}
 
       <div className="list">
-        {groups.length === 0 && <div className="empty-state"><p>暂无群组</p><p className="empty-hint">创建或被邀请加入群组</p></div>}
+        {groups.length === 0 && (
+          <div className="empty-state">
+            <p>暂无群组</p>
+            <p className="empty-hint">创建群组或等待被邀请</p>
+          </div>
+        )}
         {groups.map(g => (
           <div key={g.id} className="list-item" onClick={() => openGroupChat(g)}>
             <div className="avatar">
@@ -149,7 +272,7 @@ export default function GroupPage() {
             </div>
             <div className="btn-group" onClick={e => e.stopPropagation()}>
               <button className="btn-sm" onClick={() => setShowInvite(g)}>邀请</button>
-              <button className="btn-sm btn-danger" onClick={() => leaveGroup(g.id)}>退出</button>
+              <button className="btn-sm btn-danger" onClick={() => leaveGroup(g.id, g.name)}>退出</button>
             </div>
           </div>
         ))}

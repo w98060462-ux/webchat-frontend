@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { userApi, authApi } from '../../api'
 import { useAuthStore } from '../../store/authStore'
+import { useChatStore } from '../../store/chatStore'
+import { clearPublicKeyCache } from '../../crypto/publicKeyCache'
+import { clearGroupKeyCache } from '../../crypto/groupKeyCache'
 import { getApiError } from '../../utils'
 
 export default function ProfilePage() {
@@ -10,6 +13,7 @@ export default function ProfilePage() {
   const setUser = useAuthStore(s => s.setUser)
   const clearAuth = useAuthStore(s => s.clearAuth)
   const refreshToken = useAuthStore(s => s.refreshToken)
+  const resetAll = useChatStore(s => s.resetAll)
   const [editing, setEditing] = useState(false)
   const [nickname, setNickname] = useState(user?.nickname ?? '')
   const [error, setError] = useState('')
@@ -38,6 +42,9 @@ export default function ProfilePage() {
     try {
       if (refreshToken) await authApi.logout(refreshToken)
     } catch { /* ignore */ }
+    resetAll()
+    clearPublicKeyCache()
+    clearGroupKeyCache()
     clearAuth()
     navigate('/login')
   }
@@ -91,11 +98,15 @@ export default function ProfilePage() {
       <div className="settings-list">
         <div className="settings-item">
           <span>聊天记录存储</span>
-          <span className="settings-value">本地设备</span>
+          <span className="settings-value">仅本设备</span>
         </div>
         <div className="settings-item">
-          <span>服务器数据</span>
-          <span className="settings-value">账号信息仅</span>
+          <span>服务器存储</span>
+          <span className="settings-value">仅账号信息</span>
+        </div>
+        <div className="settings-item settings-item-link" onClick={() => navigate('/about')}>
+          <span>关于 WebChat</span>
+          <span className="settings-arrow">›</span>
         </div>
       </div>
 

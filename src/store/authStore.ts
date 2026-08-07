@@ -20,7 +20,10 @@ export const useAuthStore = create<AuthState>()(
       setAuth: (accessToken, refreshToken, user) =>
         set({ accessToken, refreshToken, user }),
       setUser: (user) => set({ user }),
-      clearAuth: () => set({ accessToken: null, refreshToken: null, user: null }),
+      clearAuth: () => {
+        localStorage.removeItem('webchat-auth')
+        set({ accessToken: null, refreshToken: null, user: null })
+      },
     }),
     {
       name: 'webchat-auth',

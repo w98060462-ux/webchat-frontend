@@ -13,9 +13,10 @@ export default function ChatListPage() {
     loadConversations()
   }, [])
 
-  const filtered = conversations.filter(c =>
-    c.targetName.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = conversations.filter(c => {
+    const name = c.targetNickname || c.targetUsername || ''
+    return name.toLowerCase().includes(search.toLowerCase())
+  })
 
   function openChat(conv: Conversation) {
     navigate(`/chat/${conv.id}`, { state: { conv } })
@@ -38,34 +39,37 @@ export default function ChatListPage() {
         {filtered.length === 0 && (
           <div className="empty-state">
             <p>暂无消息</p>
-            <p className="empty-hint">去好友列表开始聊天吧</p>
+            <p className="empty-hint">去在线列表开始聊天吧</p>
           </div>
         )}
-        {filtered.map(conv => (
-          <div key={conv.id} className="list-item" onClick={() => openChat(conv)}>
-            <div className="avatar">
-              {conv.targetAvatar
-                ? <img src={conv.targetAvatar} alt="" />
-                : <span>{(conv.targetName || '?')[0].toUpperCase()}</span>
-              }
-              {conv.type === 'group' && <span className="avatar-badge">群</span>}
-            </div>
-            <div className="list-item-body">
-              <div className="list-item-row">
-                <span className="list-item-name">{conv.targetName || '未知'}</span>
-                {conv.lastMessageTime && (
-                  <span className="list-item-time">{formatTime(conv.lastMessageTime)}</span>
-                )}
+        {filtered.map(conv => {
+          const displayName = conv.targetNickname || conv.targetUsername
+          return (
+            <div key={conv.id} className="list-item" onClick={() => openChat(conv)}>
+              <div className="avatar">
+                {conv.targetAvatar
+                  ? <img src={conv.targetAvatar} alt="" />
+                  : <span>{(displayName || '?')[0].toUpperCase()}</span>
+                }
+                {conv.type === 'group' && <span className="avatar-badge">群</span>}
               </div>
-              <div className="list-item-row">
-                <span className="list-item-preview">{conv.lastMessage ?? ''}</span>
-                {conv.unreadCount > 0 && (
-                  <span className="badge">{conv.unreadCount}</span>
-                )}
+              <div className="list-item-body">
+                <div className="list-item-row">
+                  <span className="list-item-name">{displayName || '未知'}</span>
+                  {conv.lastMessageTime && (
+                    <span className="list-item-time">{formatTime(conv.lastMessageTime)}</span>
+                  )}
+                </div>
+                <div className="list-item-row">
+                  <span className="list-item-preview">{conv.lastMessage ?? ''}</span>
+                  {conv.unreadCount > 0 && (
+                    <span className="badge">{conv.unreadCount}</span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

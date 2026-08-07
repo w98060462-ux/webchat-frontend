@@ -5,6 +5,7 @@ export interface User {
   username: string
   nickname: string | null
   avatar: string | null
+  publicKey?: string | null
   createdAt: string
 }
 
@@ -12,13 +13,6 @@ export interface AuthResponse {
   accessToken: string
   refreshToken: string
   user: User
-}
-
-export interface FriendItem {
-  friendshipId: number
-  user: User
-  status: 'PENDING' | 'ACCEPTED' | 'REJECTED'
-  createdAt: string
 }
 
 export interface GroupMember {
@@ -59,30 +53,30 @@ export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'failed'
 export type ConversationType = 'private' | 'group'
 
 export interface Message {
-  id: string            // 客户端生成 UUID
+  id: string
   conversationId: string
   conversationType: ConversationType
-  fromUserId: number
   fromUsername: string
   fromNickname: string | null
   fromAvatar: string | null
-  toUserId?: number
-  toGroupId?: number
+  toUsername?: string      // 私聊目标 username
+  toGroupName?: string     // 群聊目标 groupName
   contentType: MessageContentType
   content: string
   filename?: string
   fileSize?: number
   status: MessageStatus
   timestamp: number
-  createdAt: number     // 本地入库时间
+  createdAt: number
 }
 
 export interface Conversation {
   id: string
   type: ConversationType
-  targetId: number      // userId 或 groupId
-  targetName: string
+  targetUsername: string   // 私聊对方 username 或群名
+  targetNickname: string | null
   targetAvatar: string | null
+  groupId?: number         // 群聊时的数字 ID，用于加密
   lastMessage: string | null
   lastMessageTime: number | null
   unreadCount: number
@@ -93,21 +87,30 @@ export interface Conversation {
 export type WsMessageType =
   | 'CHAT' | 'GROUP_CHAT' | 'PING'
   | 'CHAT_DELIVERY' | 'NEW_MESSAGE' | 'PONG' | 'ERROR'
-  | 'FRIEND_REQUEST' | 'FRIEND_ACCEPTED'
-  | 'USER_ONLINE' | 'USER_OFFLINE'
+  | 'USER_ONLINE' | 'USER_OFFLINE' | 'GROUP_KEY_ROTATE'
+  | 'FILE_RELAY' | 'GROUP_DISSOLVED'
+  | 'FILE_TRANSFER_START' | 'FILE_CHUNK' | 'FILE_CHUNK_ACK'
+  | 'FILE_TRANSFER_END' | 'FILE_TRANSFER_ERROR'
+  | 'MESSAGE_READ'
 
 export interface WsMessage {
   type: WsMessageType
   messageId?: string
-  toUserId?: number
-  toGroupId?: number
+  status?: string          // CHAT_DELIVERY 时：delivered / offline
+  toUsername?: string
+  toGroupName?: string
+  groupId?: number
   contentType?: MessageContentType
   content?: string
   filename?: string
   fileSize?: number
-  fromUserId?: number
+  fileData?: string
   fromUsername?: string
   fromNickname?: string
   fromAvatar?: string
   timestamp?: number
+  // 分片传输专用
+  transferId?: string
+  chunkIndex?: number
+  totalChunks?: number
 }

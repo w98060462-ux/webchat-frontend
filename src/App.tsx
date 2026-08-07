@@ -8,6 +8,7 @@ import ChatPage from './pages/chat/ChatPage'
 import FriendPage from './pages/friend/FriendPage'
 import GroupPage from './pages/group/GroupPage'
 import ProfilePage from './pages/profile/ProfilePage'
+import AboutPage from './pages/about/AboutPage'
 import type React from 'react'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="friends" element={<FriendPage />} />
           <Route path="groups" element={<GroupPage />} />
           <Route path="profile" element={<ProfilePage />} />
+          <Route path="about" element={<AboutPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/chat" replace />} />
       </Routes>
