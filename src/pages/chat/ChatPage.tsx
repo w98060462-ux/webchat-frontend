@@ -46,6 +46,22 @@ export default function ChatPage() {
   const pageRef = useRef<HTMLDivElement>(null)
   const currentTransferIdRef = useRef<string | null>(null)
 
+  // 聊天页挂载时锁住父容器 .main-content 的滚动，防止 header 被带走
+  // 同时清除 padding-bottom（tabbar 空间），由 .chat-input-area 自己处理底部间距
+  useEffect(() => {
+    const mainContent = pageRef.current?.closest('.main-content') as HTMLElement | null
+    if (mainContent) {
+      mainContent.style.overflow = 'hidden'
+      mainContent.style.paddingBottom = '0'
+    }
+    return () => {
+      if (mainContent) {
+        mainContent.style.overflow = ''
+        mainContent.style.paddingBottom = ''
+      }
+    }
+  }, [])
+
   // 监听 WS 层推来的文件传输事件
   useEffect(() => {
     function onTransferError(e: Event) {

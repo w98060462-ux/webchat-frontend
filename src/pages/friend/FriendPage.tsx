@@ -40,7 +40,11 @@ export default function FriendPage() {
   const [onlineUsers, setOnlineUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => { loadOnline() }, [])
+  useEffect(() => {
+    const mainContent = document.querySelector('.main-content') as HTMLElement | null
+    if (mainContent) { mainContent.style.overflow = ''; mainContent.style.paddingBottom = '' }
+    loadOnline()
+  }, [])
 
   // 实时监听上线/下线事件
   useEffect(() => {

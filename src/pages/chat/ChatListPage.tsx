@@ -15,6 +15,9 @@ export default function ChatListPage() {
   const pressTarget = useRef<Conversation | null>(null)
 
   useEffect(() => {
+    // 防御：ChatPage 异常卸载时 overflow 可能残留，这里主动恢复
+    const mainContent = document.querySelector('.main-content') as HTMLElement | null
+    if (mainContent) { mainContent.style.overflow = ''; mainContent.style.paddingBottom = '' }
     loadConversations()
   }, [])
 

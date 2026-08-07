@@ -29,7 +29,11 @@ export default function GroupPage() {
   const [leaving, setLeaving] = useState(false)
   const [inviting, setInviting] = useState<number | null>(null)
 
-  useEffect(() => { loadGroups() }, [])
+  useEffect(() => {
+    const mainContent = document.querySelector('.main-content') as HTMLElement | null
+    if (mainContent) { mainContent.style.overflow = ''; mainContent.style.paddingBottom = '' }
+    loadGroups()
+  }, [])
   useEffect(() => {
     if (showInvite) {
       userApi.online().then(r => {
