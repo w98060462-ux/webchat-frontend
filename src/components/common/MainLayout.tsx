@@ -114,7 +114,7 @@ export default function MainLayout() {
         </NavLink>
         <NavLink to="/friends" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
           <span className="nav-icon">👥</span>
-          <span>好友</span>
+          <span>在线</span>
         </NavLink>
         <NavLink to="/groups" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
           <span className="nav-icon">🏠</span>
