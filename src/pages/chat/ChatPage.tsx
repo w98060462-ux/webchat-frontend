@@ -68,7 +68,7 @@ export default function ChatPage() {
     function onReceiveProgress(e: Event) {
       const { transferId, received, totalChunks, startedAt } = (e as CustomEvent).detail
       setReceiveProgress(prev =>
-        prev?.transferId === transferId
+        prev?.transferId === transferId && prev != null
           ? { ...prev, received, total: totalChunks, startedAt }
           : prev
       )
